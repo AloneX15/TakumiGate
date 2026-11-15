@@ -4,9 +4,7 @@
   "version": "${version}",
   "name": "${name}",
   "description": "Lets only invited Takumi Launcher players join a private event server, and warns or kicks players when the event publishes a mandatory update.",
-  "authors": [
-    "TakumiStudios"
-  ],
+  "authors": ["TakumiStudios"],
   "contact": {
     "homepage": "https://github.com/AloneX15/TakumiGate",
     "sources": "https://github.com/AloneX15/TakumiGate",
