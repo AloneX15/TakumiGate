@@ -1,0 +1,20 @@
+{
+  "modmenu.descriptionTranslation.takumi_gate": "Lets only invited Takumi Launcher players join a private event server, and warns or kicks players when the event publishes a mandatory update.",
+  "takumi_gate.kick.no_launcher": "Join through Takumi Launcher to play on this server.",
+  "takumi_gate.kick.protocol": "Your Takumi Gate version does not match this server. Update the instance from Takumi Launcher.",
+  "takumi_gate.kick.unavailable": "Your access could not be checked right now. Try again in a minute.",
+  "takumi_gate.kick.outdated": "There is a mandatory update for this instance. Update it from Takumi Launcher.",
+  "takumi_gate.update.title": "Mandatory update",
+  "takumi_gate.update.subtitle": "Restart the game to avoid errors",
+  "takumi_gate.update.chat": "A mandatory update (version %s) was published. Restart the game from Takumi Launcher: players still on the old version will be disconnected in %s min.",
+  "takumi_gate.update.chat_now": "A mandatory update (version %s) was published. Restart the game from Takumi Launcher.",
+  "takumi_gate.update.warn": "Mandatory update: you will be disconnected in %s min. Restart from Takumi Launcher.",
+  "takumi_gate.client.notice": "[Takumi] Mandatory update (version %s) published. Restart the game to avoid errors.",
+  "takumi_gate.client.restart_button": "[Restart and update]",
+  "takumi_gate.client.minutes_left": "Mandatory update: %s min left. Type /takumi reiniciar",
+  "takumi_gate.client.restart_now": "Mandatory update: restart now. Type /takumi reiniciar",
+  "takumi_gate.client.reloaded": "[Takumi] Event resource packs updated.",
+  "takumi_gate.client.restarting": "[Takumi] Closing the game to update it…",
+  "takumi_gate.client.restart_failed": "[Takumi] Could not ask Takumi Launcher to restart. Close the game and press Play.",
+  "takumi_gate.client.not_takumi": "[Takumi] This game was not started from a Takumi Launcher private instance."
+}

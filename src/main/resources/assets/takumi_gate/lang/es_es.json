@@ -1,0 +1,20 @@
+{
+  "modmenu.descriptionTranslation.takumi_gate": "Solo deja entrar en el servidor de un evento privado a los jugadores invitados que usan Takumi Launcher, y avisa o desconecta cuando el evento publica una actualización obligatoria.",
+  "takumi_gate.kick.no_launcher": "Entra desde Takumi Launcher para jugar en este servidor.",
+  "takumi_gate.kick.protocol": "Tu versión de Takumi Gate no es compatible con este servidor. Actualiza la instancia desde Takumi Launcher.",
+  "takumi_gate.kick.unavailable": "No se ha podido comprobar tu acceso. Inténtalo de nuevo en un minuto.",
+  "takumi_gate.kick.outdated": "Hay una actualización obligatoria de la instancia. Actualiza desde Takumi Launcher.",
+  "takumi_gate.update.title": "Actualización obligatoria",
+  "takumi_gate.update.subtitle": "Reinicia el juego para evitar errores",
+  "takumi_gate.update.chat": "Se ha publicado una actualización obligatoria (versión %s). Reinicia el juego desde Takumi Launcher: dentro de %s min se desconectará a quien siga con la versión anterior.",
+  "takumi_gate.update.chat_now": "Se ha publicado una actualización obligatoria (versión %s). Reinicia el juego desde Takumi Launcher.",
+  "takumi_gate.update.warn": "Actualización obligatoria: te desconectarán en %s min. Reinicia desde Takumi Launcher.",
+  "takumi_gate.client.notice": "[Takumi] Se ha publicado una actualización obligatoria (versión %s). Reinicia el juego para evitar errores.",
+  "takumi_gate.client.restart_button": "[Reiniciar y actualizar]",
+  "takumi_gate.client.minutes_left": "Actualización obligatoria: quedan %s min. Escribe /takumi reiniciar",
+  "takumi_gate.client.restart_now": "Actualización obligatoria: reinicia ya. Escribe /takumi reiniciar",
+  "takumi_gate.client.reloaded": "[Takumi] Packs de recursos del evento actualizados.",
+  "takumi_gate.client.restarting": "[Takumi] Cerrando el juego para actualizarlo…",
+  "takumi_gate.client.restart_failed": "[Takumi] No se ha podido pedir el reinicio a Takumi Launcher. Cierra el juego y pulsa Jugar.",
+  "takumi_gate.client.not_takumi": "[Takumi] Este juego no se ha iniciado desde una instancia privada de Takumi Launcher."
+}

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "Lets only invited Takumi Launcher players join a private event server, and warns or kicks players when the event publishes a mandatory update.",
+  "authors": [
+    "TakumiStudios"
+  ],
+  "contact": {
+    "homepage": "https://github.com/AloneX15/TakumiGate",
+    "sources": "https://github.com/AloneX15/TakumiGate",
+    "issues": "https://github.com/AloneX15/TakumiGate/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/takumi_gate/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.takumistudios.takumi_gate.TakumiGate"
+    ],
+    "client": [
+      "com.takumistudios.takumi_gate.client.TakumiGateClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader}",
+    "minecraft": "${minecraft}",
+    "java": ">=${java}",
+    "fabric-api": ">=${fabric_api}"
+  },
+  "mixins": [
+    "takumi_gate.mixins.json"
+  ]
+}

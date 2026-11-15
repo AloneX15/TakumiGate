@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "takumi_gate-test",
+  "version": "1.0.0",
+  "name": "Takumi Gate GameTests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "com.takumistudios.takumi_gate.test.TakumiGateGameTests"
+    ],
+    "fabric-client-gametest": [
+      "com.takumistudios.takumi_gate.test.TakumiGateClientGameTest",
+      "com.takumistudios.takumi_gate.test.TakumiGateLoginGameTest",
+      "com.takumistudios.takumi_gate.test.TakumiGateSignalsGameTest"
+    ]
+  },
+  "depends": {
+    "takumi_gate": "*",
+    "fabric-gametest-api-v1": "*"
+  }
+}
