@@ -11,7 +11,7 @@ val javaVersion = sc.properties.get<String>("deps.java").toInt()
 // Nombre del jar: <modid>-<versión del mod>+mc<versión>.jar
 version = "$modVersion+mc$mcVersion"
 group = sc.properties.get<String>("mod.group")
-base.archivesName = modId
+base.archivesName = "$modId-fabric"
 
 repositories {
     // Cada grupo se busca solo en su repositorio
@@ -33,7 +33,7 @@ loom {
     }
 
     runConfigs.all {
-        runDirectory = rootProject.file("run")
+        runDirectory = rootProject.file(providers.gradleProperty("gateRunDir").getOrElse("run"))
         generateRunConfig = true
     }
 }

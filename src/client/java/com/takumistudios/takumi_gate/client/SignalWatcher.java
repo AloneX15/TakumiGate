@@ -17,7 +17,7 @@ import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import net.fabricmc.loader.api.FabricLoader;
+import com.takumistudios.takumi_gate.GatePlatform;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
@@ -29,7 +29,7 @@ import net.minecraft.server.packs.repository.PackRepository;
  * Watches {@code <game>/.takumi/} (written by Takumi Launcher) every two seconds on its own daemon thread and hands the
  * results to the game thread. Only runs for private instances started by Takumi Launcher.
  */
-final class SignalWatcher {
+public final class SignalWatcher {
     private static final long PERIOD_SECONDS = 2;
     private static final long REMINDER_SECONDS = 60;
 
@@ -44,8 +44,8 @@ final class SignalWatcher {
     private SignalWatcher() {
     }
 
-    static void start() {
-        dir = FabricLoader.getInstance().getGameDir().resolve(Signals.DIR);
+    public static void start() {
+        dir = GatePlatform.gameDir().resolve(Signals.DIR);
         executor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "Takumi Gate-Signals");
             thread.setDaemon(true);
@@ -54,17 +54,24 @@ final class SignalWatcher {
         executor.scheduleWithFixedDelay(SignalWatcher::check, PERIOD_SECONDS, PERIOD_SECONDS, TimeUnit.SECONDS);
     }
 
+    public static void stop() {
+        if (executor != null) {
+            executor.shutdownNow();
+            executor = null;
+        }
+    }
+
     /**
      * Once the game is up: open every mod jar ({@link JarWarmup}) and tell the launcher, which then locks the mod
      * folders until the game exits. Off the game thread.
      */
-    static void onClientStarted() {
+    public static void onClientStarted() {
         if (executor == null) {
             return;
         }
         executor.execute(() -> {
             try {
-                int jars = JarWarmup.run(FabricLoader.getInstance().getGameDir());
+                int jars = JarWarmup.run(GatePlatform.gameDir());
                 write(Signals.LOADED, "{\"jars\":" + jars + ",\"at\":\"" + Instant.now() + "\"}\n");
             } catch (RuntimeException e) {
                 // Without the signal the launcher simply does not lock the folders.
@@ -74,7 +81,7 @@ final class SignalWatcher {
     }
 
     /** {@code /takumi reiniciar}: the launcher restarts the game updated once it closes. */
-    static boolean requestRestart() {
+    public static boolean requestRestart() {
         if (dir == null) {
             return false;
         }
@@ -154,7 +161,13 @@ final class SignalWatcher {
         }
         Component restart = Component.translatable("takumi_gate.client.restart_button")
                 .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN).withUnderlined(true)
-                        .withClickEvent(new ClickEvent.SuggestCommand("/takumi reiniciar")));
+                        .withClickEvent(
+                        //? if >=26.1 {
+                        new ClickEvent.SuggestCommand("/takumi reiniciar")
+                        //?} else {
+                        /*new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/takumi reiniciar")
+                        *///?}
+                        ));
         minecraft.player.sendSystemMessage(Component.translatable("takumi_gate.client.notice", parsed.version())
                 .withStyle(ChatFormatting.GOLD).append(" ").append(restart));
         if (!parsed.notes().isBlank()) {
@@ -166,9 +179,14 @@ final class SignalWatcher {
     private static void remind(int minutes) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
-            minecraft.player.sendOverlayMessage(minutes > 0
+            Component message = minutes > 0
                     ? Component.translatable("takumi_gate.client.minutes_left", minutes).withStyle(ChatFormatting.GOLD)
-                    : Component.translatable("takumi_gate.client.restart_now").withStyle(ChatFormatting.RED));
+                    : Component.translatable("takumi_gate.client.restart_now").withStyle(ChatFormatting.RED);
+            //? if >=26.1 {
+            minecraft.player.sendOverlayMessage(message);
+            //?} else {
+            /*minecraft.player.displayClientMessage(message, true);
+            *///?}
         }
     }
 

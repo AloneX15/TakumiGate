@@ -4,9 +4,14 @@
   "package": "com.takumistudios.takumi_gate.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ServerLoginPacketListenerImplAccessor"
+    "AnswerDecoderMixin",
+    "QueryDecoderMixin",
+    "NativeLoginMixin"
   ],
   "injectors": {
     "defaultRequire": 1
-  }
+  },
+  "client": [
+    "client.NativeClientLoginMixin"
+  ]
 }

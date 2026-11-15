@@ -3,6 +3,7 @@
 build/
 !gradle/wrapper/gradle-wrapper.jar
 .kotlin/
+__pycache__/
 
 # Minecraft / Loom / Stonecutter
 run/

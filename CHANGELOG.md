@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Builds separadas para Fabric/Quilt, Forge y NeoForge en 1.21.1 y 26.x.
+- Barrera de login común y pruebas de acceso para servidores híbridos Arclight.
+- Matriz de CI por cargador y pruebas del jar distribuible en Quilt y Arclight.
+
+
 ## 0.1.0
 
 - Control de acceso con el ticket de Takumi Launcher durante el login (servidores dedicados con `server_key`).

@@ -4,7 +4,6 @@ name: Release
 # release de GitHub con los jars y la sección del CHANGELOG. Todo lo demás es opcional y se activa con variables:
 #   Modrinth:    vars.MODRINTH_ID   + secrets.MODRINTH_TOKEN
 #   CurseForge:  vars.CURSEFORGE_ID + secrets.CURSEFORGE_TOKEN
-#   Maven (API): vars.MAVEN_URL     + secrets.MAVEN_USERNAME + secrets.MAVEN_PASSWORD
 
 on:
   push:
@@ -49,79 +48,27 @@ jobs:
           name: release-notes
           path: notes.md
 
-  build:
-    name: Build MC ${{ matrix.minecraft }}
+  validate:
     needs: prepare
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    name: Publish ${{ matrix.loader }} MC ${{ matrix.minecraft }}
+    needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        # una entrada por versión; game-versions = versiones de MC en Modrinth/CurseForge
-        include:
-          - minecraft: "26.1.2"
-            java: 25
-            game-versions: |
-              26.1
-              26.1.1
-              26.1.2
-          - minecraft: "26.2"
-            java: 25
-            game-versions: |
-              26.2
-          - minecraft: "26.3"
-            java: 25
-            game-versions: |
-              26.3
+        minecraft: ["1.21.1", "26.1.2", "26.2", "26.3"]
+        loader: [fabric, forge, neoforge]
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 25
-
-      - uses: gradle/actions/setup-gradle@v6
-
-      - name: Build and test
-        run: ./gradlew :${{ matrix.minecraft }}:build :${{ matrix.minecraft }}:runGameTest --stacktrace
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: takumi_gate-mc${{ matrix.minecraft }}
-          path: |
-            versions/${{ matrix.minecraft }}/build/libs/*.jar
-            !versions/${{ matrix.minecraft }}/build/libs/*-sources.jar
-            !versions/${{ matrix.minecraft }}/build/libs/*-api.jar
-          if-no-files-found: error
-
-      - name: Publish API to Maven
-        if: ${{ vars.MAVEN_URL != '' }}
-        env:
-          MAVEN_URL: ${{ vars.MAVEN_URL }}
-          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
-        run: ./gradlew :${{ matrix.minecraft }}:publish --stacktrace
-
       - uses: actions/download-artifact@v8
-        if: ${{ vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '' }}
+        with:
+          name: ${{ matrix.loader == 'fabric' && format('takumi_gate-mc{0}', matrix.minecraft) || format('takumi_gate-{0}-mc{1}', matrix.loader, matrix.minecraft) }}
+          path: jars
+      - uses: actions/download-artifact@v8
         with:
           name: release-notes
-
-      # mc-publish no respeta las exclusiones "!" de "files": sube también el -sources.jar y Modrinth puede elegirlo
-      # como archivo principal (el launcher instala entonces un jar que no es el mod). Se dejan fuera borrándolos.
-      - name: Keep only the mod jar
-        if: ${{ vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '' }}
-        run: |
-          libs="versions/${{ matrix.minecraft }}/build/libs"
-          rm -f "$libs"/*-sources.jar "$libs"/*-api.jar
-          ls -1 "$libs"
-          count="$(find "$libs" -maxdepth 1 -name '*.jar' | wc -l)"
-          if [ "$count" -ne 1 ]; then
-            echo "::error::Se esperaba exactamente un jar en $libs y hay $count"
-            exit 1
-          fi
-
       - name: Publish to Modrinth / CurseForge
         if: ${{ vars.MODRINTH_ID != '' || vars.CURSEFORGE_ID != '' }}
         uses: Kir-Antipov/mc-publish@v3.3
@@ -130,26 +77,26 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           curseforge-id: ${{ vars.CURSEFORGE_ID }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          files: versions/${{ matrix.minecraft }}/build/libs/*.jar
-          name: Takumi Gate ${{ github.ref_name }} for MC ${{ matrix.minecraft }}
-          version: ${{ github.ref_name }}+mc${{ matrix.minecraft }}
-          # Tags con guion (v1.0.0-beta.1) salen como beta
+          files: jars/*.jar
+          name: Takumi Gate ${{ github.ref_name }} (${{ matrix.loader }}, MC ${{ matrix.minecraft }})
+          version: ${{ github.ref_name }}+mc${{ matrix.minecraft }}-${{ matrix.loader }}
           version-type: ${{ contains(github.ref_name, '-') && 'beta' || 'release' }}
           changelog-file: notes.md
-          loaders: fabric
-          game-versions: ${{ matrix.game-versions }}
-          java: ${{ matrix.java }}
-          dependencies: |
-            fabric-api(required)
+          loaders: |
+            ${{ matrix.loader }}
+            ${{ matrix.loader == 'fabric' && 'quilt' || '' }}
+          game-versions: ${{ matrix.minecraft }}
+          java: ${{ matrix.minecraft == '1.21.1' && 21 || 25 }}
+          dependencies: ${{ matrix.loader == 'fabric' && 'fabric-api(required)' || '' }}
 
   github-release:
     name: GitHub release
-    needs: build
+    needs: [validate, publish]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: takumi_gate-mc*
+          pattern: takumi_gate-*
           path: jars
           merge-multiple: true
 
@@ -163,7 +110,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           {
-            echo "Un jar por versión de Minecraft (26.1.2, 26.2 y 26.3). Requiere Fabric Loader y Fabric API."
+            echo "Jars por cargador para Minecraft 1.21.1, 26.1.2, 26.2 y 26.3. Fabric/Quilt requieren Fabric API; Forge y NeoForge tienen jars propios. Consulta README.md para Arclight."
             echo
             cat notes.md
           } > body.md

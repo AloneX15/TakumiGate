@@ -15,7 +15,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.takumistudios.takumi_gate.TakumiGate"
+      "com.takumistudios.takumi_gate.fabric.FabricGate"
     ],
     "client": [
       "com.takumistudios.takumi_gate.client.TakumiGateClient"

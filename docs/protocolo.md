@@ -46,3 +46,19 @@ Mientras el juego corre, Takumi Launcher escribe en `<juego>/.takumi/` y el mod 
 | `restart.request` | Igual que `quit.request` | El launcher vuelve a lanzar la instancia actualizada al cerrarse el juego. Si el juego no se cierra en 20 s, lo cierra el launcher |
 
 Los IDs de pack se validan (`file/<nombre>`, sin `/`, `\` ni `..`) y los archivos de más de 64 KB se ignoran.
+
+
+## 4. Adaptadores de cargador
+
+Todos conservan `takumi_gate:ticket` y protocolo 1. La query se envía cuando Minecraft ya tiene el
+perfil autenticado; VERIFYING queda bloqueado hasta resolver la verificación. Fabric y Quilt usan
+los decodificadores y el registro de queries de Fabric API y entregan la respuesta a la barrera común.
+Forge y NeoForge decodifican únicamente la transacción negativa reservada de Gate. Las otras queries
+conservan el comportamiento de su cargador. Arclight utiliza el adaptador de su cargador subyacente.
+
+La respuesta de login vanilla lleva un booleano nullable antes del protocolo: `false` si el cliente
+no entiende el canal; `true` seguido de `[protocolo][ticket]` si lo entiende. Se rechazan datos
+sobrantes y tickets de tamaño o formato incorrectos antes de llamar a la web.
+
+Forge y NeoForge no emiten `loaded.json`: su apertura diferida de archivos no se considera compatible
+con el bloqueo de lectura del launcher. Las demás señales mantienen el mismo contrato.

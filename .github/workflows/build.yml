@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -22,23 +23,24 @@ jobs:
 
       - name: Authorship and metadata
         run: |
-          fail=0
-          json=src/main/resources/fabric.mod.json
-          grep -q "\"authors\": *\[[^]]*\"TakumiStudios\"" "$json" || { echo "::error file=$json::authors debe incluir \"TakumiStudios\""; fail=1; }
-          for key in license icon contact; do
-            grep -q "\"$key\"" "$json" || { echo "::error file=$json::falta \"$key\""; fail=1; }
-          done
-          grep -q "TakumiStudios" README.md || { echo "::error file=README.md::falta \"Creado por TakumiStudios\""; fail=1; }
-          [ -f LICENSE ] || { echo "::error::falta LICENSE"; fail=1; }
-          [ -f CHANGELOG.md ] || { echo "::error::falta CHANGELOG.md"; fail=1; }
-          [ -f SECURITY.md ] || { echo "::error::falta SECURITY.md"; fail=1; }
-          exit $fail
+          node <<'JS'
+          const fs = require('fs');
+          const metadata = JSON.parse(fs.readFileSync('src/main/resources/fabric.mod.json', 'utf8'));
+          if (!metadata.authors?.includes('TakumiStudios')) throw new Error('Missing TakumiStudios authorship');
+          for (const key of ['license', 'icon', 'contact']) {
+            if (!metadata[key]) throw new Error(`Missing metadata: ${key}`);
+          }
+          for (const file of ['README.md', 'LICENSE', 'CHANGELOG.md', 'SECURITY.md', 'MIXINS.md']) {
+            if (!fs.existsSync(file)) throw new Error(`Missing file: ${file}`);
+          }
+          if (!fs.readFileSync('README.md', 'utf8').includes('TakumiStudios')) throw new Error('Missing README authorship');
+          JS
 
       - name: Code hygiene
         run: |
           fail=0
           # Nada de salida por consola ni trazas sueltas: todo pasa por el logger del mod
-          if grep -rnE 'System\.(out|err)\.print|\.printStackTrace\(\)' src/main src/client 2>/dev/null; then
+          if grep -rnE 'System\.(out|err)\.print|\.printStackTrace\(\)' src/main src/client src/native 2>/dev/null; then
             echo "::error::usa el logger del mod en lugar de System.out/err o printStackTrace"; fail=1
           fi
           # Si hay mixins, deben estar documentados
@@ -77,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        minecraft: ["26.1.2", "26.2", "26.3"]
+        minecraft: ["1.21.1", "26.1.2", "26.2", "26.3"]
         # Sin compat pack: compat: [false]
         compat: [false, true]
     steps:
@@ -86,7 +88,9 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 25
+          java-version: |
+            21
+            25
 
       - uses: gradle/actions/setup-gradle@v6
 
@@ -151,6 +155,7 @@ jobs:
         env:
           # Renderizado por software (Mesa): 26.3 necesita un visual GLX de 24 bits y acaba usando Vulkan con lavapipe
           LIBGL_ALWAYS_SOFTWARE: "1"
+          TAKUMI_INSTANCE_VERSION: "1"
         run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render" ./gradlew :${{ matrix.minecraft }}:runClientGameTest --stacktrace
 
       - name: Upload screenshots
@@ -169,12 +174,114 @@ jobs:
           path: versions/${{ matrix.minecraft }}/build/run/clientGameTest/logs/
           if-no-files-found: ignore
 
+  native:
+    name: ${{ matrix.loader }} MC ${{ matrix.minecraft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        minecraft: ["1.21.1", "26.1.2", "26.2", "26.3"]
+        loader: [forge, neoforge]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build and unit tests
+        run: ./gradlew :${{ matrix.minecraft }}-${{ matrix.loader }}:build --stacktrace
+      - name: Login against a dedicated server
+        run: >-
+          python3 scripts/smoke_login.py
+          --run-dir versions/${{ matrix.minecraft }}-${{ matrix.loader }}/run
+          -- ./gradlew :${{ matrix.minecraft }}-${{ matrix.loader }}:runServer --console=plain
+      - name: Install client graphics runtime
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+      - name: Client startup and networking mixins
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: >-
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render"
+          ./gradlew :${{ matrix.minecraft }}-${{ matrix.loader }}:runClient -PgateClientSmoke --console=plain
+      - name: Check client result
+        run: >-
+          python3 -c 'import json; from pathlib import Path;
+          assert json.loads(Path("versions/${{ matrix.minecraft }}-${{ matrix.loader }}/run/takumi-client-smoke.json").read_text())["success"]'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: takumi_gate-${{ matrix.loader }}-mc${{ matrix.minecraft }}
+          path: |
+            versions/${{ matrix.minecraft }}-${{ matrix.loader }}/build/libs/*.jar
+            !versions/${{ matrix.minecraft }}-${{ matrix.loader }}/build/libs/*-sources.jar
+            !versions/${{ matrix.minecraft }}-${{ matrix.loader }}/build/libs/*-dev.jar
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: logs-${{ matrix.loader }}-${{ matrix.minecraft }}
+          path: |
+            versions/${{ matrix.minecraft }}-${{ matrix.loader }}/run/smoke-console.log
+            versions/${{ matrix.minecraft }}-${{ matrix.loader }}/run/logs/
+            versions/${{ matrix.minecraft }}-${{ matrix.loader }}/build/reports/
+
+  packaged:
+    name: Packaged ${{ matrix.platform }} ${{ matrix.loader }} MC ${{ matrix.minecraft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: quilt, loader: fabric, minecraft: "1.21.1", java: 21, node: "1.21.1"}
+          - {platform: quilt, loader: fabric, minecraft: "26.1.2", java: 25, node: "26.1.2"}
+          - {platform: quilt, loader: fabric, minecraft: "26.2", java: 25, node: "26.2"}
+          - {platform: quilt, loader: fabric, minecraft: "26.3", java: 25, node: "26.3"}
+          - {platform: arclight, loader: fabric, minecraft: "1.21.1", java: 21, node: "1.21.1"}
+          - {platform: arclight, loader: forge, minecraft: "1.21.1", java: 21, node: "1.21.1-forge"}
+          - {platform: arclight, loader: neoforge, minecraft: "1.21.1", java: 21, node: "1.21.1-neoforge"}
+          - {platform: arclight, loader: fabric, minecraft: "26.1.2", java: 25, node: "26.1.2"}
+          - {platform: arclight, loader: forge, minecraft: "26.1.2", java: 25, node: "26.1.2-forge"}
+          - {platform: arclight, loader: neoforge, minecraft: "26.1.2", java: 25, node: "26.1.2-neoforge"}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build distributable
+        run: ./gradlew :${{ matrix.node }}:build --stacktrace
+      - name: Select game Java
+        run: echo "GAME_JAVA=${JAVA_HOME_${{ matrix.java }}_X64}/bin/java" >> "$GITHUB_ENV"
+      - name: Install upstream server and mod
+        run: >-
+          python3 scripts/prepare_test_server.py
+          --platform ${{ matrix.platform }} --loader ${{ matrix.loader }}
+          --minecraft ${{ matrix.minecraft }} --java "$GAME_JAVA"
+      - name: Verify packaged login
+        run: >-
+          python3 scripts/smoke_login.py
+          --run-dir build/server-tests/${{ matrix.platform }}-${{ matrix.loader }}-${{ matrix.minecraft }}
+          --cwd build/server-tests/${{ matrix.platform }}-${{ matrix.loader }}-${{ matrix.minecraft }}
+          -- "$GAME_JAVA" -Xmx2G -jar server-launch.jar nogui
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: logs-${{ matrix.platform }}-${{ matrix.loader }}-${{ matrix.minecraft }}
+          path: build/server-tests/**/smoke-console.log
+
   dev-release:
     name: Publish dev build
     # Solo en pushes a main y solo si todas las pruebas pasaron
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     # Sin test de cliente: needs: [standards, test]
-    needs: [standards, test, client]
+    needs: [standards, test, client, native, packaged]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -185,7 +292,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: takumi_gate-mc*
+          pattern: takumi_gate-*
           path: jars
           merge-multiple: true
 
@@ -199,9 +306,9 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Dev build ($(echo "$GITHUB_SHA" | cut -c1-7))" \
-            --notes "Build automática de la rama main, generada tras pasar todas las pruebas en MC 26.1.2, 26.2 y 26.3.
+            --notes "Build automática de la rama main, generada tras pasar todas las pruebas en MC 1.21.1, 26.1.2, 26.2 y 26.3.
 
-          Puede tener cambios sin publicar oficialmente. Elige el jar de tu versión de Minecraft; necesitas Fabric API.
+          Puede tener cambios sin publicar oficialmente. Elige el jar de tu versión y cargador. Fabric y Quilt necesitan Fabric API; Forge y NeoForge tienen jars propios. Consulta README.md para Arclight.
 
           Commit: $GITHUB_SHA
 

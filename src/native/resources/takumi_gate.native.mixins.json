@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.takumistudios.takumi_gate.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "AnswerDecoderMixin",
+    "QueryDecoderMixin",
+    "NativeLoginMixin",
+    "NativeServerMixin",
+    "NativePlayerListMixin"
+  ],
+  "client": [
+    "client.NativeClientLoginMixin",
+    "client.NativeClientLifecycleMixin",
+    "client.NativeClientCommandMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

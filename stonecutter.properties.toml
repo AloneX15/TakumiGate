@@ -37,3 +37,13 @@ mod.min_fabric_api = "0.160.5"
 deps.fabric_api = "0.166.2+26.3"
 compat.lithium = "mc26.3-0.26.2-fabric"
 compat.ferritecore = "9.0.0-fabric"
+
+["1.21.1"]
+mod.mc_compat = "1.21.1"
+mod.mc_releases = ["1.21.1"]
+mod.min_loader = "0.16.14"
+mod.min_fabric_api = "0.116.4"
+deps.java = "21"
+deps.fabric_api = "0.116.18+1.21.1"
+compat.lithium = "mc1.21.1-0.15.3-fabric"
+compat.ferritecore = "7.0.2-fabric"

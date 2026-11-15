@@ -1,0 +1,19 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+issueTrackerURL="https://github.com/AloneX15/TakumiGate/issues"
+[[mods]]
+modId="takumi_gate"
+version="${version}"
+displayName="Takumi Gate"
+authors="TakumiStudios"
+logoFile="assets/takumi_gate/icon.png"
+description="Lets only invited Takumi Launcher players join a private event server and enforces mandatory instance updates."
+[[dependencies.takumi_gate]]
+modId="minecraft"
+type="required"
+versionRange="[${minecraft}]"
+ordering="NONE"
+side="BOTH"
+[[mixins]]
+config="takumi_gate.native.mixins.json"

@@ -4,9 +4,10 @@ import com.mojang.authlib.GameProfile;
 import com.takumistudios.takumi_gate.GateApi;
 import com.takumistudios.takumi_gate.GateConfig;
 import com.takumistudios.takumi_gate.GateProtocol;
+import com.takumistudios.takumi_gate.GatePlatform;
+import com.takumistudios.takumi_gate.MinecraftCompat;
 import com.takumistudios.takumi_gate.TakumiGate;
 import com.takumistudios.takumi_gate.UpdatePolicy;
-import com.takumistudios.takumi_gate.mixin.ServerLoginPacketListenerImplAccessor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -17,24 +18,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.networking.v1.LoginPacketSender;
-import io.netty.buffer.Unpooled;
-import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
+//? if >=26.1 {
 import net.minecraft.resources.Identifier;
+//?} else {
+/*import net.minecraft.resources.ResourceLocation;
+*///?}
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 
 /**
  * Server side of Takumi Gate (dedicated servers only):
@@ -47,7 +43,11 @@ import net.minecraft.server.network.ServerLoginPacketListenerImpl;
  * </ul>
  */
 public final class GateServer {
+    //? if >=26.1 {
     public static final Identifier CHANNEL = Identifier.fromNamespaceAndPath(TakumiGate.MOD_ID, GateProtocol.CHANNEL_PATH);
+    //?} else {
+    /*public static final ResourceLocation CHANNEL = ResourceLocation.fromNamespaceAndPath(TakumiGate.MOD_ID, GateProtocol.CHANNEL_PATH);
+    *///?}
     private static final long ENFORCE_SECONDS = 5;
 
     /** Gate of the dedicated server that is running, or null (no server, integrated server, or not configured). */
@@ -74,47 +74,30 @@ public final class GateServer {
         this.api = new GateApi(config, io);
     }
 
-    /**
-     * Registers the global hooks once. They do nothing until a dedicated server starts with a usable
-     * {@code config/takumi_gate.json}; singleplayer and LAN worlds are never gated.
-     */
-    public static void init() {
-        ServerLifecycleEvents.SERVER_STARTING.register(GateServer::onServerStarting);
-        ServerLifecycleEvents.SERVER_STOPPING.register(stopping -> {
-            GateServer current = session;
-            session = null;
-            if (current != null) {
-                current.io.shutdownNow();
-            }
-        });
-        ServerLoginConnectionEvents.QUERY_START.register((handler, srv, sender, sync) -> {
-            GateServer current = session;
-            if (current != null) {
-                current.onQueryStart(handler, sender);
-            }
-        });
-        ServerLoginNetworking.registerGlobalReceiver(CHANNEL, (srv, handler, understood, buf, sync, sender) -> {
-            GateServer current = session;
-            if (current != null) {
-                current.onResponse(srv, handler, understood, buf, sync);
-            }
-        });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, srv) -> {
-            GateServer current = session;
-            if (current != null) {
-                UUID id = handler.getPlayer().getUUID();
-                current.versions.remove(id);
-                current.notified.remove(id);
-            }
-        });
+    public static void stop() {
+        GateServer current = session;
+        session = null;
+        if (current != null) {
+            current.io.shutdownNow();
+            current.versions.clear();
+            current.notified.clear();
+        }
     }
 
-    private static void onServerStarting(MinecraftServer server) {
+    public static void disconnected(UUID id) {
+        GateServer current = session;
+        if (current != null) {
+            current.versions.remove(id);
+            current.notified.remove(id);
+        }
+    }
+
+    public static void onServerStarting(MinecraftServer server) {
         if (!server.isDedicatedServer()) {
             return;
         }
         try {
-            GateConfig config = GateConfig.load(FabricLoader.getInstance().getConfigDir());
+            GateConfig config = GateConfig.load(GatePlatform.configDir());
             if (!config.active()) {
                 if (config.enabled()) {
                     TakumiGate.LOGGER.warn("Takumi Gate desactivado: {}", config.problem());
@@ -143,56 +126,30 @@ public final class GateServer {
 
     // ─── Login ────────────────────────────────────────────────────────────────
 
-    private void onQueryStart(ServerLoginPacketListenerImpl handler, LoginPacketSender sender) {
-        try {
-            FriendlyByteBuf request = new FriendlyByteBuf(Unpooled.buffer());
-            request.writeByte(GateProtocol.VERSION);
-            sender.sendPacket(CHANNEL, request);
-        } catch (RuntimeException e) {
-            TakumiGate.LOGGER.error("No se pudo pedir el ticket al cliente", e);
-            handler.disconnect(Messages.unavailable());
+    /** Common authorization, used by each loader before the player enters the world. */
+    public static CompletableFuture<Component> authorize(GameProfile profile, boolean understood, int protocol, String raw) {
+        GateServer current = session;
+        if (current == null) {
+            return CompletableFuture.completedFuture(null);
         }
-    }
-
-    private void onResponse(MinecraftServer srv, ServerLoginPacketListenerImpl handler, boolean understood,
-            FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer synchronizer) {
-        try {
-            GameProfile profile = ((ServerLoginPacketListenerImplAccessor) handler).takumi_gate$profile();
-            if (profile == null) {
-                handler.disconnect(Messages.noLauncher());
-                return;
-            }
-            if (config.bypass().contains(profile.id())) {
-                TakumiGate.LOGGER.info("{} entra sin ticket (bypass_uuids)", profile.name());
-                return;
-            }
-            if (!understood) {
-                handler.disconnect(Messages.noLauncher());
-                return;
-            }
-            int protocol = buf.readByte();
-            String raw = buf.readUtf(GateProtocol.MAX_TICKET_LENGTH + 16);
-            if (protocol != GateProtocol.VERSION) {
-                handler.disconnect(Messages.otherProtocol());
-                return;
-            }
-            Optional<String> ticket = GateProtocol.cleanTicket(raw);
-            if (ticket.isEmpty()) {
-                handler.disconnect(Messages.noLauncher());
-                return;
-            }
-            CompletableFuture<Void> done = api.verify(ticket.get(), profile.id(), profile.name(), srv.usesAuthentication())
-                    .thenCompose(verdict -> {
-                        Component refusal = decide(profile, verdict);
-                        return refusal == null ? CompletableFuture.completedFuture(null)
-                                : CompletableFuture.runAsync(() -> handler.disconnect(refusal), srv);
-                    });
-            synchronizer.waitFor(done);
-        } catch (RuntimeException e) {
-            // Malformed answer or a bug: refuse this player, keep the server running.
-            TakumiGate.LOGGER.debug("Respuesta de login no válida", e);
-            handler.disconnect(Messages.noLauncher());
+        if (profile == null) {
+            return CompletableFuture.completedFuture(Messages.noLauncher());
         }
+        if (current.config.bypass().contains(MinecraftCompat.id(profile))) {
+            return CompletableFuture.completedFuture(null);
+        }
+        if (!understood) {
+            return CompletableFuture.completedFuture(Messages.noLauncher());
+        }
+        if (protocol != GateProtocol.VERSION) {
+            return CompletableFuture.completedFuture(Messages.otherProtocol());
+        }
+        Optional<String> ticket = GateProtocol.cleanTicket(raw);
+        if (ticket.isEmpty()) {
+            return CompletableFuture.completedFuture(Messages.noLauncher());
+        }
+        return current.api.verify(ticket.get(), MinecraftCompat.id(profile), MinecraftCompat.name(profile), current.server.usesAuthentication())
+                .thenApply(verdict -> current.decide(profile, verdict));
     }
 
     /** Message to refuse the player with, or null to let them in. */
@@ -200,18 +157,18 @@ public final class GateServer {
         return switch (verdict) {
             case GateApi.Verdict.Allowed allowed when allowed.restartRequired() -> Messages.outdated();
             case GateApi.Verdict.Allowed allowed -> {
-                versions.put(profile.id(), allowed.version());
-                notified.remove(profile.id());
-                TakumiGate.LOGGER.debug("{} (Takumi: {}) entra con la versión {}", profile.name(), allowed.username(),
+                versions.put(MinecraftCompat.id(profile), allowed.version());
+                notified.remove(MinecraftCompat.id(profile));
+                TakumiGate.LOGGER.debug("{} (Takumi: {}) entra con la versión {}", MinecraftCompat.name(profile), allowed.username(),
                         allowed.version());
                 yield null;
             }
             case GateApi.Verdict.Denied denied -> {
-                TakumiGate.LOGGER.info("{} rechazado: {}", profile.name(), denied.reason());
+                TakumiGate.LOGGER.info("{} rechazado: {}", MinecraftCompat.name(profile), denied.reason());
                 yield Component.literal(denied.reason());
             }
             case GateApi.Verdict.Unavailable unavailable -> {
-                TakumiGate.LOGGER.warn("No se pudo comprobar a {} con la web: {}", profile.name(), unavailable.detail());
+                TakumiGate.LOGGER.warn("No se pudo comprobar a {} con la web: {}", MinecraftCompat.name(profile), unavailable.detail());
                 yield config.allowWhenApiDown() ? null : Messages.unavailable();
             }
         };
