@@ -113,6 +113,21 @@ class TakumiGateTest {
         assertEquals(300, ((GateApi.Verdict.Denied) longReason).reason().length());
     }
 
+    /** Bug: a refusal with a malformed body became "unavailable", which allow_when_api_down let in. */
+    @Test
+    void malformedRefusalsAreStillDenials() {
+        assertEquals(new GateApi.Verdict.Denied("Acceso denegado."), GateApi.parseVerify(403, "{\"error\":null}"));
+        assertEquals(new GateApi.Verdict.Denied("Acceso denegado."), GateApi.parseVerify(403, "{\"error\":{\"x\":1}}"));
+        assertEquals(new GateApi.Verdict.Denied("Acceso denegado."), GateApi.parseVerify(403, "<html>"));
+        assertEquals(new GateApi.Verdict.Denied("No."), GateApi.parseVerify(200, "{\"ok\":false,\"error\":\"No.\"}"));
+        assertInstanceOf(GateApi.Verdict.Unavailable.class, GateApi.parseVerify(200, "{\"ok\":\"yes\",\"username\":\"a\",\"version\":1}"));
+        assertInstanceOf(GateApi.Verdict.Unavailable.class, GateApi.parseVerify(200, "{\"ok\":true,\"username\":null,\"version\":1}"));
+        assertInstanceOf(GateApi.Verdict.Unavailable.class, GateApi.parseVerify(200, "{\"ok\":true,\"username\":\"a\",\"version\":\"x\"}"));
+        assertInstanceOf(GateApi.Verdict.Unavailable.class, GateApi.parseVerify(200, null));
+        assertEquals(new GateApi.Verdict.Allowed("a", 2, false),
+                GateApi.parseVerify(200, "{\"ok\":true,\"username\":\"a\",\"version\":2,\"restart_required\":null}"));
+    }
+
     @Test
     void statusIsParsed() {
         List<UpdatePolicy.Release> releases = GateApi.parseStatus("""
@@ -172,5 +187,27 @@ class TakumiGateTest {
         assertEquals(List.of("file/Evento.zip", "file/Carpeta"),
                 Signals.parsePacks("{\"version\":2,\"packs\":[\"file/Evento.zip\",\"file/Carpeta\",\"file/../x\",\"vanilla\",\"file/a/b\"]}"));
         assertEquals(List.of(), Signals.parsePacks("[]"));
+    }
+
+    /** notice.json exactly as Takumi Launcher writes it (serde_json pretty + chrono to_rfc3339, nanos and +00:00). */
+    @Test
+    void launcherNoticeFormatIsUnderstood() {
+        Optional<Signals.Notice> notice = Signals.parseNotice("""
+                {
+                  "version": 7,
+                  "grace_minutes": 5,
+                  "deadline": "2026-11-15T12:00:00.123456789+00:00",
+                  "notes": ""
+                }""");
+        assertEquals(Optional.of(new Signals.Notice(7, 5, T0.plusNanos(123_456_789), "")), notice);
+    }
+
+    /** Bug: the website answers 400 for an offline name that is not a Minecraft name; that is not an outage. */
+    @Test
+    void clientErrorsAreDenialsNotOutages() {
+        assertInstanceOf(GateApi.Verdict.Denied.class, GateApi.parseVerify(400, "{\"error\":\"Falta uuid o name.\"}"));
+        assertInstanceOf(GateApi.Verdict.Denied.class, GateApi.parseVerify(404, ""));
+        assertInstanceOf(GateApi.Verdict.Unavailable.class, GateApi.parseVerify(429, ""));
+        assertInstanceOf(GateApi.Verdict.Unavailable.class, GateApi.parseVerify(503, ""));
     }
 }

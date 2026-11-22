@@ -87,7 +87,7 @@ public abstract class NativeLoginMixin implements LoginBarrier {
                 takumi_gate$verdict = GateServer.authorize(takumi_gate$profile, answer != null,
                         answer == null ? 0 : answer.protocol(), answer == null ? "" : answer.ticket());
             } catch (RuntimeException e) {
-                TakumiGate.LOGGER.debug("Respuesta de login no v?lida", e);
+                TakumiGate.LOGGER.debug("Respuesta de login no válida", e);
                 takumi_gate$verdict = CompletableFuture.completedFuture(Messages.noLauncher());
             }
         });

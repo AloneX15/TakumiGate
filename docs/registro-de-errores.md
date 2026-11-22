@@ -43,3 +43,22 @@
   Podía faltar `AnswerDecoderMixin` al arrancar o no encontrarse las clases comunes al compilar JUnit.
   Se unifican explícitamente los destinos del compilador en `build/sourceSets/<sourceSet>`. Regresión:
   build, login real y smoke de cliente en las cuatro versiones Forge.
+
+## 2026-11-22 · Un rechazo mal formado podía dejar entrar con `allow_when_api_down`
+
+- **Síntoma:** una respuesta `403` con `"error": null` (u otro tipo que no fuera texto) lanzaba una excepción al
+  leerla; el error acababa como «web no disponible» y, con `allow_when_api_down: true`, el jugador entraba.
+- **Causa:** `GateApi.parseVerify` usaba `getAsString`/`getAsBoolean` sin comprobar el tipo, y el
+  `exceptionally` de la petición convertía cualquier excepción en `Unavailable`.
+- **Solución:** `parseVerify` nunca lanza: lee los campos comprobando el tipo y todo `403` u `ok: false` es un rechazo.
+- **Test:** `TakumiGateTest.malformedRefusalsAreStillDenials`.
+
+## 2026-11-22 · Un nombre no válido en un servidor offline podía entrar con `allow_when_api_down`
+
+- **Síntoma:** en `online-mode=false`, un jugador con un nombre como `Pepe.X` (válido para el servidor, no para la web)
+  y un ticket inventado recibía `400 Falta uuid o name.` de la web; el mod lo trataba como «web caída» y, con
+  `allow_when_api_down: true`, le dejaba entrar.
+- **Causa:** todo estado distinto de `200`/`403` se consideraba indisponibilidad.
+- **Solución:** cualquier `4xx` salvo `401`, `408` y `429` es un rechazo. La caída de la web sigue siendo red, `5xx`,
+  `408` o `429`.
+- **Test:** `TakumiGateTest.clientErrorsAreDenialsNotOutages`; reproducido contra la web local con `curl`.

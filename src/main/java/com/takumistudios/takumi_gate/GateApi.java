@@ -76,6 +76,9 @@ public final class GateApi {
     public CompletableFuture<List<UpdatePolicy.Release>> status() {
         HttpRequest request = request("/api/gate/status").GET().build();
         return http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
+            if (response.statusCode() == 401) {
+                throw new IllegalStateException("la web no reconoce la server_key de este servidor");
+            }
             if (response.statusCode() != 200) {
                 throw new IllegalStateException("HTTP " + response.statusCode());
             }
@@ -93,6 +96,10 @@ public final class GateApi {
 
     // ─── Parsing (pure, unit-tested) ───────────────────────────────────────────
 
+    /**
+     * Never throws: a malformed answer must not turn into {@link Verdict.Unavailable}, which
+     * {@code allow_when_api_down} would let in. Any explicit refusal ({@code 403} or {@code ok: false}) is a denial.
+     */
     static Verdict parseVerify(int status, String body) {
         JsonObject json;
         try {
@@ -101,24 +108,45 @@ public final class GateApi {
         } catch (RuntimeException e) {
             json = new JsonObject();
         }
-        if (status == 200 && json.has("ok") && json.get("ok").getAsBoolean()) {
-            try {
-                return new Verdict.Allowed(
-                        json.get("username").getAsString(),
-                        json.get("version").getAsInt(),
-                        json.has("restart_required") && json.get("restart_required").getAsBoolean());
-            } catch (RuntimeException e) {
+        Boolean ok = bool(json, "ok");
+        if (status == 200 && Boolean.TRUE.equals(ok)) {
+            String username = string(json, "username");
+            JsonElement version = json.get("version");
+            Boolean restart = bool(json, "restart_required");
+            if (username == null || version == null || !version.isJsonPrimitive()
+                    || !version.getAsJsonPrimitive().isNumber()) {
                 return new Verdict.Unavailable("respuesta incompleta");
             }
+            return new Verdict.Allowed(username, version.getAsInt(), Boolean.TRUE.equals(restart));
         }
-        if (status == 403) {
-            String reason = json.has("error") ? json.get("error").getAsString() : "Acceso denegado.";
+        if (status == 403 || (status >= 200 && status < 300 && Boolean.FALSE.equals(ok))) {
+            String reason = string(json, "error");
+            if (reason == null || reason.isBlank()) {
+                reason = "Acceso denegado.";
+            }
             return new Verdict.Denied(reason.length() > MAX_REASON ? reason.substring(0, MAX_REASON) : reason);
         }
         if (status == 401) {
             return new Verdict.Unavailable("la web no reconoce la server_key de este servidor");
         }
+        // Any other client error means the website will not admit this login (e.g. 400 for a name that is not a
+        // Minecraft account name on an offline server). Fail closed: allow_when_api_down is only for outages.
+        if (status >= 400 && status < 500 && status != 408 && status != 429) {
+            return new Verdict.Denied("Acceso denegado.");
+        }
         return new Verdict.Unavailable("HTTP " + status);
+    }
+
+    private static Boolean bool(JsonObject json, String key) {
+        JsonElement element = json.get(key);
+        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()
+                ? element.getAsBoolean() : null;
+    }
+
+    private static String string(JsonObject json, String key) {
+        JsonElement element = json.get(key);
+        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()
+                ? element.getAsString() : null;
     }
 
     static List<UpdatePolicy.Release> parseStatus(String body) {

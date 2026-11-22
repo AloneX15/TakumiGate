@@ -127,7 +127,10 @@ public final class SignalWatcher {
                 int minutes = UpdatePolicy.minutesLeft(Instant.now(), current.deadline());
                 Minecraft.getInstance().execute(() -> remind(minutes));
             }
-        } catch (IOException | RuntimeException e) {
+        } catch (IOException e) {
+            // Usually transient (the launcher is replacing a file, or Windows has it locked): retry next period.
+            TakumiGate.LOGGER.debug("No se pudieron leer los avisos de Takumi Launcher; se reintenta", e);
+        } catch (RuntimeException e) {
             TakumiGate.LOGGER.error("Error leyendo los avisos de Takumi Launcher; se desactivan", e);
             enabled = false;
         }
@@ -144,12 +147,14 @@ public final class SignalWatcher {
         if (modified.equals(seen)) {
             return Optional.empty();
         }
+        // Marked as seen only once read: a failed read is retried instead of losing the signal.
+        String body = Files.readString(file, StandardCharsets.UTF_8);
         if (isNotice) {
             noticeSeen = modified;
         } else {
             reloadSeen = modified;
         }
-        return Optional.of(Files.readString(file, StandardCharsets.UTF_8));
+        return Optional.of(body);
     }
 
     // ─── Game thread ───────────────────────────────────────────────────────────

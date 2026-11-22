@@ -21,8 +21,9 @@ Cómo se hablan el launcher, el juego, el servidor del evento y la web de Takumi
    - `200 { ok: true, username, version, current_version, restart_required }` → entra, salvo que
      `restart_required` (su versión ya no vale) → se le rechaza.
    - `403 { ok: false, error }` → se le rechaza con `error` (no es miembro, ticket caducado, otra cuenta, suspendido…).
-   - Error de red o `401` (clave mal puesta) → se le rechaza con «No se ha podido comprobar tu acceso», salvo
-     `allow_when_api_down: true`.
+   - Otro `4xx` (p. ej. `400` por un nombre que no es de Minecraft en un servidor offline) → se le rechaza siempre.
+   - Error de red, `5xx`, `408`, `429` o `401` (clave mal puesta) → se le rechaza con «No se ha podido comprobar tu
+     acceso», salvo `allow_when_api_down: true`.
 
 ## 2. Actualizaciones obligatorias
 
