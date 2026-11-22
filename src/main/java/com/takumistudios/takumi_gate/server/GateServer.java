@@ -62,6 +62,8 @@ public final class GateServer {
     private volatile List<UpdatePolicy.Release> releases = List.of();
     private final MinecraftServer server;
     private volatile boolean enforcing = true;
+    /** Logs each status outage once instead of every poll. */
+    private volatile boolean statusFailing;
 
     private GateServer(GateConfig config, MinecraftServer server) {
         this.config = config;
@@ -112,7 +114,7 @@ public final class GateServer {
                 }
             }, ENFORCE_SECONDS, ENFORCE_SECONDS, TimeUnit.SECONDS);
             session = gate;
-            TakumiGate.LOGGER.debug("Takumi Gate activo: solo entran miembros de la instancia ({})", config.baseUrl());
+            TakumiGate.LOGGER.info("Takumi Gate activo: solo entran miembros de la instancia ({})", config.baseUrl());
         } catch (RuntimeException e) {
             TakumiGate.LOGGER.error("No se pudo iniciar Takumi Gate; el servidor queda sin control de acceso", e);
         }
@@ -181,6 +183,15 @@ public final class GateServer {
             api.status().whenComplete((list, error) -> {
                 if (error == null) {
                     releases = list;
+                    if (statusFailing) {
+                        statusFailing = false;
+                        TakumiGate.LOGGER.info("Takumi Gate vuelve a recibir el estado de la instancia");
+                    }
+                } else if (!statusFailing) {
+                    // Once per outage: without the status, mandatory updates are not enforced.
+                    statusFailing = true;
+                    TakumiGate.LOGGER.warn("No se pudo consultar el estado de la instancia ({}); las actualizaciones "
+                            + "obligatorias no se aplican hasta que vuelva", error.getMessage());
                 } else {
                     TakumiGate.LOGGER.debug("Estado de la instancia no disponible: {}", error.getMessage());
                 }

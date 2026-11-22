@@ -9,6 +9,8 @@ __pycache__/
 run/
 versions/*/build/
 versions/*/run/
+# Configuraciones de ejecución de Eclipse que genera ForgeGradle
+*.launch
 logs/
 
 # IDE
